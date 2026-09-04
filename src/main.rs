@@ -2,8 +2,8 @@
 pub mod models;
 pub mod network;
 pub mod app;
+pub mod ui;
 
-use app::state::ActiveModal;
 use models::AppEvent;
 use std::io::{self, Write};
 use std::sync::Arc;
@@ -103,146 +103,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let app_state_clone = Arc::clone(&app_state);
 
             terminal.draw(|f| {
-                let screen_size = f.size();
-                
-                let horizontal_chunks = ratatui::layout::Layout::default()
-                    .direction(ratatui::layout::Direction::Horizontal)
-                    .constraints([
-                        ratatui::layout::Constraint::Percentage(15),
-                        ratatui::layout::Constraint::Percentage(70),
-                        ratatui::layout::Constraint::Percentage(15),
-                    ])
-                    .split(screen_size);
-
-                let middle_area = horizontal_chunks[1];
-
-                let vertical_chunks = ratatui::layout::Layout::default()
-                    .direction(ratatui::layout::Direction::Vertical)
-                    .constraints([
-                        ratatui::layout::Constraint::Min(3),
-                        ratatui::layout::Constraint::Length(3), 
-                    ])
-                    .split(middle_area);
-
                 if let Ok(mut state) = app_state_clone.try_lock() {
-                    let self_user = state.self_username.clone();
-                    let show_time = state.show_timestamp;
-                    let show_lat = state.show_latency;
-
-                    let msgs: Vec<ratatui::widgets::ListItem> = state.messages.iter().map(|m| {
-                        use ratatui::style::{Color, Style};
-                        use ratatui::text::{Line, Span};
-
-                        let is_me = m.author == self_user;
-                        let author_color = if is_me { Color::Blue } else { Color::Green };
-                        let header_style = Style::default().fg(author_color);
-
-                        let content_color = match m.status {
-                            models::MessageStatus::Sending => Color::DarkGray,
-                            models::MessageStatus::Failed => Color::Red,
-                            models::MessageStatus::Delivered => Color::White,
-                        };
-
-                        let status_indicator = match m.status {
-                            models::MessageStatus::Sending => " [...]",
-                            models::MessageStatus::Failed => " [❌]",
-                            models::MessageStatus::Delivered => "",
-                        };
-
-                        // Split timestamp string into time component and latency component
-                        let parts: Vec<&str> = m.timestamp.split('|').map(|s| s.trim()).collect();
-                        let time_part = parts.get(0).copied().unwrap_or("");
-                        let lat_part = parts.get(1).copied().unwrap_or("");
-
-                        let mut meta_str = String::new();
-                        if show_time && !time_part.is_empty() {
-                            meta_str.push_str(time_part);
-                        }
-                        if show_lat && !lat_part.is_empty() {
-                            if !meta_str.is_empty() {
-                                meta_str.push_str(" | ");
-                            }
-                            meta_str.push_str(lat_part);
-                        }
-
-                        let header_line = if !meta_str.is_empty() {
-                            Line::from(vec![
-                                Span::styled(format!("{}", m.author), header_style),
-                                Span::raw(" "),
-                                Span::styled(format!("[{}]", meta_str), header_style),
-                                if !status_indicator.is_empty() {
-                                    Span::styled(format!(" {}", status_indicator), header_style)
-                                } else {
-                                    Span::raw("")
-                                },
-                            ])
-                        } else {
-                            Line::from(vec![
-                                Span::styled(format!("{}", m.author), header_style),
-                                if !status_indicator.is_empty() {
-                                    Span::styled(format!(" {}", status_indicator), header_style)
-                                } else {
-                                    Span::raw("")
-                                },
-                            ])
-                        };
-
-                        let content_line = Line::from(vec![
-                            Span::styled(format!("  {}", m.content), Style::default().fg(content_color))
-                        ]);
-
-                        ratatui::widgets::ListItem::new(vec![header_line, content_line])
-                    }).collect();
-
-                    let time_status = if show_time { "F2: Hide Time" } else { "F2: Show Time" };
-                    let lat_status = if show_lat { "F3: Hide Latency" } else { "F3: Show Latency" };
-                    let title_text = format!(" messages [{} | {} | Ctrl+G/F5: Channel | Ctrl+X/F4: Switch Token] ", time_status, lat_status);
-
-                    let msg_list = ratatui::widgets::List::new(msgs)
-                        .block(ratatui::widgets::Block::default()
-                            .borders(ratatui::widgets::Borders::ALL)
-                            .title(title_text));
-                    
-                    f.render_stateful_widget(msg_list, vertical_chunks[0], &mut state.list_state);
-
-                    let prompt_span = ratatui::text::Span::raw("> ");
-                    let text_span = ratatui::text::Span::styled(
-                        state.input_text.as_str(),
-                        ratatui::style::Style::default().fg(ratatui::style::Color::Yellow)
-                    );
-                    let input_line = ratatui::text::Line::from(vec![prompt_span, text_span]);
-
-                    let input_box = ratatui::widgets::Paragraph::new(input_line)
-                        .block(ratatui::widgets::Block::default()
-                            .borders(ratatui::widgets::Borders::ALL));
-                    
-                    f.render_widget(input_box, vertical_chunks[1]);
-
-                    // Modal Overlays
-                    if state.active_modal == ActiveModal::LogoutPrompt {
-                        let modal_area = ratatui::layout::Rect::new(
-                            screen_size.width / 4,
-                            screen_size.height / 3,
-                            screen_size.width / 2,
-                            7,
-                        );
-                        f.render_widget(ratatui::widgets::Clear, modal_area);
-                        let block = ratatui::widgets::Paragraph::new("\n Clear saved token and exit?\n\n Press [Y] to confirm or [N/Esc] to cancel.")
-                            .block(ratatui::widgets::Block::default().title(" Logout / Switch Token ").borders(ratatui::widgets::Borders::ALL));
-                        f.render_widget(block, modal_area);
-                    } else if state.active_modal == ActiveModal::SwitchChannelPrompt {
-                        let modal_area = ratatui::layout::Rect::new(
-                            screen_size.width / 6,
-                            screen_size.height / 3,
-                            (screen_size.width * 2) / 3,
-                            7,
-                        );
-                        f.render_widget(ratatui::widgets::Clear, modal_area);
-                        let modal_text = format!("\n Enter Channel URL / ID:\n > {}\n\n Press [Enter] to Jump | [Esc] Cancel", state.modal_input);
-                        let block = ratatui::widgets::Paragraph::new(modal_text)
-                            .block(ratatui::widgets::Block::default().title(" Jump to Specific Channel ").borders(ratatui::widgets::Borders::ALL));
-                        f.render_widget(block, modal_area);
-                    }
+                    ui::render(f, &mut state);
                 }
             })?;
         }

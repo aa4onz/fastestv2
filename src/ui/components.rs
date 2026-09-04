@@ -1,89 +1,99 @@
 // src/ui/components.rs
 use crate::app::AppState;
 use crate::models::MessageStatus;
-use crate::ui::theme::Theme;
 use ratatui::{
-    style::{Modifier, Style, Color},
+    style::{Color, Style},
     text::{Line, Span},
     widgets::{Block, Borders, List, ListItem, Paragraph},
 };
 
-pub fn render_servers(state: &AppState, style: Style) -> List<'static> {
-    let items: Vec<ListItem> = state.servers.iter().enumerate().map(|(i, s)| {
-        let prefix = if i == state.selected_server_idx { ">> " } else { "   " };
-        ListItem::new(format!("{}{}", prefix, s.name))
+pub fn render_messages<'a>(state: &AppState) -> (List<'a>, String) {
+    let self_user = &state.self_username;
+    let show_time = state.show_timestamp;
+    let show_lat = state.show_latency;
+
+    let msgs: Vec<ListItem> = state.messages.iter().map(|m| {
+        let is_me = m.author == *self_user;
+        let author_color = if is_me { Color::Blue } else { Color::Green };
+        let header_style = Style::default().fg(author_color);
+
+        let content_color = match m.status {
+            MessageStatus::Sending => Color::DarkGray,
+            MessageStatus::Failed => Color::Red,
+            MessageStatus::Delivered => Color::White,
+        };
+
+        let status_indicator = match m.status {
+            MessageStatus::Sending => " [...]",
+            MessageStatus::Failed => " [❌]",
+            MessageStatus::Delivered => "",
+        };
+
+        // Split timestamp string into time component and latency component
+        let parts: Vec<&str> = m.timestamp.split('|').map(|s| s.trim()).collect();
+        let time_part = parts.first().copied().unwrap_or("");
+        let lat_part = parts.get(1).copied().unwrap_or("");
+
+        let mut meta_str = String::new();
+        if show_time && !time_part.is_empty() {
+            meta_str.push_str(time_part);
+        }
+        if show_lat && !lat_part.is_empty() {
+            if !meta_str.is_empty() {
+                meta_str.push_str(" | ");
+            }
+            meta_str.push_str(lat_part);
+        }
+
+        let header_line = if !meta_str.is_empty() {
+            Line::from(vec![
+                Span::styled(m.author.clone(), header_style),
+                Span::raw(" "),
+                Span::styled(format!("[{}]", meta_str), header_style),
+                if !status_indicator.is_empty() {
+                    Span::styled(format!(" {}", status_indicator), header_style)
+                } else {
+                    Span::raw("")
+                },
+            ])
+        } else {
+            Line::from(vec![
+                Span::styled(m.author.clone(), header_style),
+                if !status_indicator.is_empty() {
+                    Span::styled(format!(" {}", status_indicator), header_style)
+                } else {
+                    Span::raw("")
+                },
+            ])
+        };
+
+        let content_line = Line::from(vec![
+            Span::styled(format!("  {}", m.content), Style::default().fg(content_color))
+        ]);
+
+        ListItem::new(vec![header_line, content_line])
     }).collect();
 
-    List::new(items)
-        .block(Block::default().title(" servers ").borders(Borders::ALL).border_style(style))
+    let time_status = if show_time { "F2: Hide Time" } else { "F2: Show Time" };
+    let lat_status = if show_lat { "F3: Hide Latency" } else { "F3: Show Latency" };
+    let title_text = format!(" messages [{} | {} | Ctrl+G/F5: Channel | Ctrl+X/F4: Switch Token] ", time_status, lat_status);
+
+    let msg_list = List::new(msgs)
+        .block(Block::default()
+            .borders(Borders::ALL)
+            .title(title_text));
+
+    (msg_list, state.input_text.clone())
 }
 
-pub fn render_channels(state: &AppState, style: Style) -> List<'static> {
-    let current_channels = &state.servers[state.selected_server_idx].channels;
-    let items: Vec<ListItem> = current_channels.iter().enumerate().map(|(i, c)| {
-        let prefix = if i == state.selected_channel_idx { ">> " } else { "   " };
-        ListItem::new(format!("{}# {}", prefix, c.name))
-    }).collect();
+pub fn render_input_box<'a>(input_text: &'a str) -> Paragraph<'a> {
+    let prompt_span = Span::raw("> ");
+    let text_span = Span::styled(
+        input_text,
+        Style::default().fg(Color::Yellow)
+    );
+    let input_line = Line::from(vec![prompt_span, text_span]);
 
-    List::new(items)
-        .block(Block::default().title(" channels ").borders(Borders::ALL).border_style(style))
-}
-
-pub fn render_chat_feed(state: &AppState, theme: &Theme, available_rows: usize) -> Paragraph<'static> {
-    let mut chat_lines = Vec::new();
-
-    for msg in state.messages.iter() {
-        match msg.status {
-            MessageStatus::Sending => {
-                chat_lines.push(Line::from(vec![
-                    Span::styled(msg.author.clone(), theme.self_message),
-                    Span::styled(format!(" [{}]", msg.timestamp), theme.system_text),
-                ]));
-                chat_lines.push(Line::from(vec![Span::styled(format!("  {}", msg.content), theme.system_text)]));
-            }
-            MessageStatus::Delivered => {
-                let author_style = if msg.author == state.self_username { theme.self_message } else { theme.peer_message };
-                chat_lines.push(Line::from(vec![
-                    Span::styled(msg.author.clone(), author_style),
-                    Span::styled(format!(" [{}]", msg.timestamp), Style::default().fg(Color::Gray)),
-                ]));
-                chat_lines.push(Line::from(vec![Span::styled(format!("  {}", msg.content), Style::default().fg(Color::White))]));
-            }
-            MessageStatus::Failed => {
-                chat_lines.push(Line::from(vec![
-                    Span::styled(msg.author.clone(), theme.error_text),
-                    Span::styled(format!(" [{}]", msg.timestamp), theme.error_text),
-                ]));
-                chat_lines.push(Line::from(vec![
-                    Span::styled(format!("  {}", msg.content), theme.error_text.add_modifier(Modifier::CROSSED_OUT)),
-                ]));
-            }
-        }
-    }
-
-    let footer_text = match state.typing_users.get(&state.current_channel_id()) {
-        Some(typers) if !typers.is_empty() => {
-            let names: Vec<String> = typers.keys().cloned().collect();
-            if names.len() == 1 {
-                format!(" ✍️ {} is typing... ", names[0])
-            } else {
-                " ✍️ Several people are typing... ".to_string()
-            }
-        }
-        _ => format!(" channel: #{} ", state.current_channel_name()),
-    };
-
-    let total_lines = chat_lines.len();
-    let visible_lines = if total_lines > available_rows {
-        chat_lines.into_iter().skip(total_lines - available_rows).collect()
-    } else {
-        chat_lines
-    };
-
-    Paragraph::new(visible_lines).block(Block::default().title(footer_text).borders(Borders::ALL))
-}
-
-pub fn render_input_field(state: &AppState, style: Style) -> Paragraph<'static> {
-    Paragraph::new(format!("> {}", state.input_text))
-        .block(Block::default().title(" chat context [Ctrl+X to Logout] ").borders(Borders::ALL).border_style(style))
+    Paragraph::new(input_line)
+        .block(Block::default().borders(Borders::ALL))
 }
