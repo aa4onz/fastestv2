@@ -46,8 +46,12 @@ pub async fn run_gateway_loop(app_state: Arc<Mutex<AppState>>, event_tx: Sender<
                                     let ev = pay.t.as_deref().unwrap_or("");
 
                                     if ev == "READY" {
-                                        if let Some(uname) = pay.d["user"]["username"].as_str() {
-                                            let _ = w_tx.send(AppEvent::SetSelfUsername(uname.to_string())).await;
+                                        let name = pay.d["user"]["global_name"]
+                                            .as_str()
+                                            .filter(|s| !s.is_empty())
+                                            .unwrap_or_else(|| pay.d["user"]["username"].as_str().unwrap_or(""));
+                                        if !name.is_empty() {
+                                            let _ = w_tx.send(AppEvent::SetSelfUsername(name.to_string())).await;
                                         }
                                     } else if ev == "MESSAGE_CREATE" && pay.d["channel_id"].as_str() == Some(&target_cid) {
                                         let msg_id_str = pay.d["id"].as_str().unwrap_or("0");
@@ -68,7 +72,12 @@ pub async fn run_gateway_loop(app_state: Arc<Mutex<AppState>>, event_tx: Sender<
                                         drop(state);
 
                                         if !is_dup {
-                                            let author = pay.d["author"]["username"].as_str().unwrap_or("Unknown").to_string();
+                                            let author = pay.d["author"]["global_name"]
+                                                .as_str()
+                                                .filter(|s| !s.is_empty())
+                                                .unwrap_or_else(|| pay.d["author"]["username"].as_str().unwrap_or("Unknown"))
+                                                .to_string();
+
                                             let _ = w_tx.send(AppEvent::IncomingMessage(DiscordMessage {
                                                 nonce,
                                                 author,
