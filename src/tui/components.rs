@@ -62,7 +62,8 @@ pub fn render_messages<'a>(state: &AppState) -> (List<'a>, String) {
         };
 
         let content_line = Line::from(vec![
-            Span::styled(format!("  {}", m.content), Style::default().fg(content_color))
+            Span::raw("  "),
+            Span::styled(&m.content, Style::default().fg(content_color)),
         ]);
 
         ListItem::new(vec![header_line, content_line])

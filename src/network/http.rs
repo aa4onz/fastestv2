@@ -1,5 +1,5 @@
 // src/network/http.rs
-use crate::models::{Channel, DiscordApiMessage, DiscordMessage, MessageStatus, Server};
+use crate::models::{Channel, DiscordApiMessage, DiscordMessage, MessagePayload, MessageStatus, Server};
 use chrono::Local;
 
 pub struct DiscordHttpClient {
@@ -53,7 +53,7 @@ impl DiscordHttpClient {
         }
 
         let api_msgs = res.json::<Vec<DiscordApiMessage>>().await?;
-        let mut parsed_msgs = Vec::new();
+        let mut parsed_msgs = Vec::with_capacity(api_msgs.len());
 
         for msg in api_msgs.into_iter().rev() {
             let author = msg.author.global_name.unwrap_or(msg.author.username);
@@ -98,13 +98,13 @@ impl DiscordHttpClient {
         Ok(())
     }
 
-    /// ⚡ OPTIMIZED FOR MAX SPEED: Sends message json frame cleanly
+    /// ⚡ OPTIMIZED FOR MAX SPEED: Sends message json frame cleanly with zero tree allocations
     pub async fn send_message(&self, channel_id: &str, text: &str, nonce: &str) -> Result<reqwest::Response, reqwest::Error> {
         let url = format!("https://discord.com/api/v10/channels/{}/messages", channel_id);
-        let json_payload = serde_json::json!({
-            "content": text,
-            "nonce": nonce
-        });
+        let payload = MessagePayload {
+            content: text.to_string(),
+            nonce: nonce.to_string(),
+        };
 
         self.client.post(&url)
             .header("Authorization", &self.token)
@@ -112,7 +112,7 @@ impl DiscordHttpClient {
             .header("Accept", "*/*")
             .header("Origin", "https://discord.com")
             .header("X-Discord-Locale", "en-US")
-            .json(&json_payload)
+            .json(&payload)
             .send()
             .await
     }

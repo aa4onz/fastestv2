@@ -58,8 +58,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         initial_state.target_channel_id = target_channel_id.clone();
         let app_state = Arc::new(Mutex::new(initial_state));
 
-        let (event_tx, mut event_rx) = mpsc::channel::<AppEvent>(256);
-        let (net_tx, net_rx) = mpsc::channel::<AppEvent>(128); 
+        let (event_tx, mut event_rx) = mpsc::channel::<AppEvent>(512);
+        let (net_tx, net_rx) = mpsc::channel::<AppEvent>(256); 
         
         let mut headers = reqwest::header::HeaderMap::new();
         headers.insert("accept", "*/*".parse().unwrap());
@@ -76,7 +76,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let http_client = reqwest::Client::builder()
             .tcp_nodelay(true)
-            .pool_max_idle_per_host(20)
+            .pool_max_idle_per_host(30)
             .pool_idle_timeout(std::time::Duration::from_secs(120))
             .default_headers(headers)
             .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36")
@@ -89,20 +89,41 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let _ = net_tx.send(AppEvent::FetchChannelHistory(target_channel_id)).await;
 
         while let Some(event) = event_rx.recv().await {
+            let mut state = app_state.lock().await;
+            let mut should_exit = false;
+
+            // Process initial event
             match event {
                 AppEvent::HttpTriggerTyping | AppEvent::HttpSendChat { .. } | AppEvent::FetchChannelHistory(_) => {
                     let _ = net_tx.send(event).await;
                 }
                 _ => {
-                    let mut state = app_state.lock().await;
-                    let should_exit = state.handle_event(event, &event_tx).await;
-                    if should_exit { break; }
-
-                    terminal.draw(|f| {
-                        tui::render(f, &mut state);
-                    })?;
+                    if state.handle_event(event, &event_tx).await {
+                        should_exit = true;
+                    }
                 }
             }
+
+            // Drain queued events instantly without re-rendering terminal per event
+            while let Ok(next_event) = event_rx.try_recv() {
+                match next_event {
+                    AppEvent::HttpTriggerTyping | AppEvent::HttpSendChat { .. } | AppEvent::FetchChannelHistory(_) => {
+                        let _ = net_tx.send(next_event).await;
+                    }
+                    _ => {
+                        if state.handle_event(next_event, &event_tx).await {
+                            should_exit = true;
+                        }
+                    }
+                }
+            }
+
+            // Perform a single batch frame draw
+            terminal.draw(|f| {
+                tui::render(f, &mut state);
+            })?;
+
+            if should_exit { break; }
         }
 
         crossterm::terminal::disable_raw_mode()?;
