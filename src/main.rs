@@ -109,6 +109,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             if let Ok(mut state) = app_state_clone.try_lock() {
                 let self_user = state.self_username.clone();
+                let show_time = state.show_timestamp;
                 let show_lat = state.show_latency;
 
                 let msgs: Vec<ratatui::widgets::ListItem> = state.messages.iter().map(|m| {
@@ -131,11 +132,32 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         models::MessageStatus::Delivered => "",
                     };
 
-                    let header_line = if show_lat {
+                    // Split timestamp string into time component and latency component
+                    let parts: Vec<&str> = m.timestamp.split('|').map(|s| s.trim()).collect();
+                    let time_part = parts.get(0).copied().unwrap_or("");
+                    let lat_part = parts.get(1).copied().unwrap_or("");
+
+                    let mut meta_str = String::new();
+                    if show_time && !time_part.is_empty() {
+                        meta_str.push_str(time_part);
+                    }
+                    if show_lat && !lat_part.is_empty() {
+                        if !meta_str.is_empty() {
+                            meta_str.push_str(" | ");
+                        }
+                        meta_str.push_str(lat_part);
+                    }
+
+                    let header_line = if !meta_str.is_empty() {
                         Line::from(vec![
                             Span::styled(format!("{}", m.author), header_style),
                             Span::raw(" "),
-                            Span::styled(format!("[{} {}]", m.timestamp, status_indicator), header_style),
+                            Span::styled(format!("[{}]", meta_str), header_style),
+                            if !status_indicator.is_empty() {
+                                Span::styled(format!(" {}", status_indicator), header_style)
+                            } else {
+                                Span::raw("")
+                            },
                         ])
                     } else {
                         Line::from(vec![
@@ -155,11 +177,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     ratatui::widgets::ListItem::new(vec![header_line, content_line])
                 }).collect();
 
-                let title_text = if show_lat {
-                    " messages [F2: Hide Timestamps | PgUp/PgDn: Scroll] "
-                } else {
-                    " messages [F2: Show Timestamps | PgUp/PgDn: Scroll] "
-                };
+                let time_status = if show_time { "F2: Hide Time" } else { "F2: Show Time" };
+                let lat_status = if show_lat { "F3: Hide Latency" } else { "F3: Show Latency" };
+                let title_text = format!(" messages [{} | {} | PgUp/PgDn: Scroll] ", time_status, lat_status);
 
                 let msg_list = ratatui::widgets::List::new(msgs)
                     .block(ratatui::widgets::Block::default()

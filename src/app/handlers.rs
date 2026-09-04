@@ -12,6 +12,9 @@ impl crate::app::state::AppState {
         tx: &Sender<AppEvent>,
     ) -> bool {
         match event {
+            AppEvent::ToggleTimestamp => {
+                self.show_timestamp = !self.show_timestamp;
+            }
             AppEvent::ToggleLatency => {
                 self.show_latency = !self.show_latency;
             }
@@ -82,7 +85,7 @@ impl crate::app::state::AppState {
                 if let Some(m) = self.messages.iter_mut().find(|x| x.nonce == nonce) {
                     m.status = MessageStatus::Failed;
                 }
-                if !self.failed_nonces.contains(&nonce) {
+                if !self.failed_nonces.contains(|nonce) {
                     self.failed_nonces.push(nonce);
                 }
             }
@@ -104,6 +107,9 @@ impl crate::app::state::AppState {
 
                 match k.code {
                     KeyCode::F(2) => {
+                        self.show_timestamp = !self.show_timestamp;
+                    }
+                    KeyCode::F(3) => {
                         self.show_latency = !self.show_latency;
                     }
                     KeyCode::PageUp => {

@@ -16,6 +16,7 @@ pub struct AppState {
     pub outbound_timers: HashMap<String, Instant>,
     pub gateway_rtt_ms: Option<u64>,
     pub clock_offset_ms: Option<i64>,
+    pub show_timestamp: bool,
     pub show_latency: bool,
     pub scroll_offset: usize,
 }
@@ -37,6 +38,7 @@ impl AppState {
             outbound_timers: HashMap::new(),
             gateway_rtt_ms: None,
             clock_offset_ms: None,
+            show_timestamp: true,
             show_latency: true,
             scroll_offset: 0,
         }
