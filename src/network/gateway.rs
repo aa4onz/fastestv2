@@ -15,15 +15,7 @@ pub async fn run_gateway_loop(app_state: Arc<Mutex<AppState>>, event_tx: Sender<
         };
         if token.is_empty() { break; }
 
-        if let Ok((ws, resp)) = connect_async(url).await {
-            // Calculate system clock offset using HTTP Date header from Gateway response
-            let clock_offset_ms: i64 = resp.headers()
-                .get("date")
-                .and_then(|h| h.to_str().ok())
-                .and_then(|d_str| chrono::DateTime::parse_from_rfc2822(d_str).ok())
-                .map(|server_time| server_time.timestamp_millis() - chrono::Utc::now().timestamp_millis())
-                .unwrap_or(0);
-
+        if let Ok((ws, _resp)) = connect_async(url).await {
             let (mut write, mut read) = ws.split();
             
             if let Some(Ok(Message::Text(t))) = read.next().await {
@@ -67,10 +59,13 @@ pub async fn run_gateway_loop(app_state: Arc<Mutex<AppState>>, event_tx: Sender<
                                         
                                         let transit_time_str = if let Ok(msg_id) = msg_id_str.parse::<u64>() {
                                             let discord_epoch_ms = (msg_id >> 22) + 1420070400000;
-                                            // Synchronize local UTC time using Gateway HTTP header clock offset
-                                            let synchronized_now_ms = (chrono::Utc::now().timestamp_millis() + clock_offset_ms) as u64;
-                                            let diff = synchronized_now_ms.saturating_sub(discord_epoch_ms);
-                                            format!("{} | {}ms", current_time_str, diff)
+                                            let now_ms = chrono::Utc::now().timestamp_millis() as u64;
+                                            if now_ms >= discord_epoch_ms {
+                                                let diff = now_ms - discord_epoch_ms;
+                                                format!("{} | {}ms", current_time_str, diff)
+                                            } else {
+                                                current_time_str.clone()
+                                            }
                                         } else {
                                             current_time_str
                                         };
