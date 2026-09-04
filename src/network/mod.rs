@@ -15,9 +15,9 @@ pub fn spawn_network_handlers(
     http_client: reqwest::Client,
     net_rx: mpsc::Receiver<AppEvent>,
 ) {
-    let (token, target_channel_id) = {
+    let token = {
         let state = app_state.try_lock().expect("Failed to lock state at initialization");
-        (state.token.clone(), state.target_channel_id.clone())
+        state.token.clone()
     };
 
     let client_wrapper = Arc::new(DiscordHttpClient::new(http_client.clone(), token));
@@ -39,16 +39,22 @@ pub fn spawn_network_handlers(
 
     // 3. ⚡ NON-BLOCKING CONCURRENT OUTBOUND HTTP WORKER PIPELINE
     let worker_tx = event_tx.clone();
+    let worker_state = Arc::clone(&app_state);
     let mut outbound_rx = net_rx;
     
     tokio::spawn(async move {
         while let Some(job) = outbound_rx.recv().await {
             let client = Arc::clone(&client_wrapper);
             let tx = worker_tx.clone();
-            let channel_id = target_channel_id.clone();
+            let channel_id = worker_state.lock().await.target_channel_id.clone();
 
             tokio::spawn(async move {
                 match job {
+                    AppEvent::FetchChannelHistory(cid) => {
+                        if let Ok(msgs) = client.fetch_messages(&cid, 50).await {
+                            let _ = tx.send(AppEvent::LoadChannelHistory(msgs)).await;
+                        }
+                    }
                     AppEvent::HttpTriggerTyping => {
                         let _ = client.send_typing(&channel_id).await;
                     }

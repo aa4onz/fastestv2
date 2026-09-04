@@ -1,4 +1,5 @@
 // src/app/handlers.rs
+use crate::app::state::ActiveModal;
 use crate::models::{AppEvent, DiscordMessage, MessageStatus};
 use chrono::Local;
 use crossterm::event::{Event, KeyCode, KeyModifiers};
@@ -44,6 +45,19 @@ impl crate::app::state::AppState {
             AppEvent::SetSelfUsername(username) => {
                 if !username.is_empty() {
                     self.self_username = username;
+                }
+            }
+            AppEvent::LoadChannelHistory(msgs) => {
+                self.messages = msgs;
+                if !self.messages.is_empty() {
+                    self.list_state.select(Some(self.messages.len() - 1));
+                }
+            }
+            AppEvent::SwitchChannel(new_channel_id) => {
+                if !new_channel_id.is_empty() {
+                    self.target_channel_id = new_channel_id.clone();
+                    self.messages.clear();
+                    let _ = tx.send(AppEvent::FetchChannelHistory(new_channel_id)).await;
                 }
             }
             AppEvent::IncomingMessage(m) => {
@@ -105,12 +119,70 @@ impl crate::app::state::AppState {
                     return true;
                 }
 
+                // Handle active modals first
+                if self.active_modal != ActiveModal::None {
+                    match self.active_modal {
+                        ActiveModal::LogoutPrompt => match k.code {
+                            KeyCode::Char('y') | KeyCode::Char('Y') => {
+                                let _ = std::fs::remove_file(".token_cache");
+                                return true;
+                            }
+                            KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => {
+                                self.active_modal = ActiveModal::None;
+                            }
+                            _ => {}
+                        },
+                        ActiveModal::SwitchChannelPrompt => match k.code {
+                            KeyCode::Esc => {
+                                self.active_modal = ActiveModal::None;
+                                self.modal_input.clear();
+                            }
+                            KeyCode::Backspace => {
+                                self.modal_input.pop();
+                            }
+                            KeyCode::Enter => {
+                                let input = self.modal_input.trim().to_string();
+                                let target_id = input.split('/').last().unwrap_or("").to_string();
+                                if !target_id.is_empty() && target_id.chars().all(|c| c.is_numeric()) {
+                                    let _ = tx.send(AppEvent::SwitchChannel(target_id)).await;
+                                }
+                                self.modal_input.clear();
+                                self.active_modal = ActiveModal::None;
+                            }
+                            KeyCode::Char(c) => {
+                                self.modal_input.push(c);
+                            }
+                            _ => {}
+                        },
+                        _ => {}
+                    }
+                    return false;
+                }
+
+                // Global shortcut keys
+                if k.code == KeyCode::Char('x') && k.modifiers.contains(KeyModifiers::CONTROL) {
+                    self.active_modal = ActiveModal::LogoutPrompt;
+                    return false;
+                }
+                if k.code == KeyCode::Char('g') && k.modifiers.contains(KeyModifiers::CONTROL) {
+                    self.active_modal = ActiveModal::SwitchChannelPrompt;
+                    self.modal_input.clear();
+                    return false;
+                }
+
                 match k.code {
                     KeyCode::F(2) => {
                         self.show_timestamp = !self.show_timestamp;
                     }
                     KeyCode::F(3) => {
                         self.show_latency = !self.show_latency;
+                    }
+                    KeyCode::F(4) => {
+                        self.active_modal = ActiveModal::LogoutPrompt;
+                    }
+                    KeyCode::F(5) => {
+                        self.active_modal = ActiveModal::SwitchChannelPrompt;
+                        self.modal_input.clear();
                     }
                     KeyCode::PageUp => {
                         let current = self.list_state.selected().unwrap_or(0);

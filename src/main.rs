@@ -3,6 +3,7 @@ pub mod models;
 pub mod network;
 pub mod app;
 
+use app::state::ActiveModal;
 use models::AppEvent;
 use std::io::{self, Write};
 use std::sync::Arc;
@@ -71,9 +72,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     network::spawn_network_handlers(Arc::clone(&app_state), event_tx.clone(), http_client.clone(), net_rx);
 
+    // Initial history fetch
+    let _ = net_tx.send(AppEvent::FetchChannelHistory(target_channel_id)).await;
+
     while let Some(event) = event_rx.recv().await {
         match event {
-            AppEvent::HttpTriggerTyping | AppEvent::HttpSendChat { .. } => {
+            AppEvent::HttpTriggerTyping | AppEvent::HttpSendChat { .. } | AppEvent::FetchChannelHistory(_) => {
                 let _ = net_tx.send(event).await;
             }
             _ => {
@@ -179,7 +183,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                 let time_status = if show_time { "F2: Hide Time" } else { "F2: Show Time" };
                 let lat_status = if show_lat { "F3: Hide Latency" } else { "F3: Show Latency" };
-                let title_text = format!(" messages [{} | {} | PgUp/PgDn: Scroll] ", time_status, lat_status);
+                let title_text = format!(" messages [{} | {} | Ctrl+G/F5: Channel | Ctrl+X/F4: Switch Token] ", time_status, lat_status);
 
                 let msg_list = ratatui::widgets::List::new(msgs)
                     .block(ratatui::widgets::Block::default()
@@ -200,6 +204,32 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         .borders(ratatui::widgets::Borders::ALL));
                 
                 f.render_widget(input_box, vertical_chunks[1]);
+
+                // Modal Overlays
+                if state.active_modal == ActiveModal::LogoutPrompt {
+                    let modal_area = ratatui::layout::Rect::new(
+                        screen_size.width / 4,
+                        screen_size.height / 3,
+                        screen_size.width / 2,
+                        7,
+                    );
+                    f.render_widget(ratatui::widgets::Clear, modal_area);
+                    let block = ratatui::widgets::Paragraph::new("\n Clear saved token and exit?\n\n Press [Y] to confirm or [N/Esc] to cancel.")
+                        .block(ratatui::widgets::Block::default().title(" Logout / Switch Token ").borders(ratatui::widgets::Borders::ALL));
+                    f.render_widget(block, modal_area);
+                } else if state.active_modal == ActiveModal::SwitchChannelPrompt {
+                    let modal_area = ratatui::layout::Rect::new(
+                        screen_size.width / 6,
+                        screen_size.height / 3,
+                        (screen_size.width * 2) / 3,
+                        7,
+                    );
+                    f.render_widget(ratatui::widgets::Clear, modal_area);
+                    let modal_text = format!("\n Enter Channel URL / ID:\n > {}\n\n Press [Enter] to Jump | [Esc] Cancel", state.modal_input);
+                    let block = ratatui::widgets::Paragraph::new(modal_text)
+                        .block(ratatui::widgets::Block::default().title(" Jump to Specific Channel ").borders(ratatui::widgets::Borders::ALL));
+                    f.render_widget(block, modal_area);
+                }
             }
         })?;
     }

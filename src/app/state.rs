@@ -4,12 +4,21 @@ use ratatui::widgets::ListState;
 use std::collections::HashMap;
 use std::time::Instant;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ActiveModal {
+    None,
+    LogoutPrompt,
+    SwitchChannelPrompt,
+}
+
 pub struct AppState {
     pub token: String,
     pub target_channel_id: String,
     pub self_username: String,
     pub messages: Vec<DiscordMessage>,
     pub input_text: String,
+    pub modal_input: String,
+    pub active_modal: ActiveModal,
     pub list_state: ListState,
     pub failed_nonces: Vec<String>,
     pub last_typing_sent: Option<Instant>,
@@ -32,6 +41,8 @@ impl AppState {
             self_username: "You".to_string(),
             messages: Vec::new(),
             input_text: String::new(),
+            modal_input: String::new(),
+            active_modal: ActiveModal::None,
             list_state,
             failed_nonces: Vec::new(),
             last_typing_sent: None,

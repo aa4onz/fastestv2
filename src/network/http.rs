@@ -1,5 +1,5 @@
 // src/network/http.rs
-use crate::models::{Channel, Server};
+use crate::models::{Channel, DiscordApiMessage, DiscordMessage, MessageStatus, Server};
 
 pub struct DiscordHttpClient {
     pub client: reqwest::Client,
@@ -36,6 +36,48 @@ impl DiscordHttpClient {
         let mut channels = res.json::<Vec<Channel>>().await?;
         channels.retain(|c| !c.name.is_empty());
         Ok(channels)
+    }
+
+    /// Fetches past message history for a given channel ID
+    pub async fn fetch_messages(&self, channel_id: &str, limit: u32) -> Result<Vec<DiscordMessage>, reqwest::Error> {
+        let url = format!("https://discord.com/api/v10/channels/{}/messages?limit={}", channel_id, limit);
+        let res = self.client.get(&url)
+            .header("Authorization", &self.token)
+            .header("Content-Type", "application/json")
+            .send()
+            .await?;
+
+        if !res.status().is_success() {
+            return Ok(Vec::new());
+        }
+
+        let api_msgs = res.json::<Vec<DiscordApiMessage>>().await?;
+        let mut parsed_msgs = Vec::new();
+
+        for msg in api_msgs.into_iter().rev() {
+            let author = msg.author.global_name.unwrap_or(msg.author.username);
+            let time_formatted = if msg.timestamp.len() >= 19 {
+                msg.timestamp[11..19].to_string()
+            } else {
+                msg.timestamp
+            };
+
+            let nonce_str = match msg.nonce {
+                Some(serde_json::Value::String(s)) => s,
+                Some(serde_json::Value::Number(n)) => n.to_string(),
+                _ => msg.id.clone(),
+            };
+
+            parsed_msgs.push(DiscordMessage {
+                nonce: nonce_str,
+                author,
+                content: msg.content,
+                timestamp: time_formatted,
+                status: MessageStatus::Delivered,
+            });
+        }
+
+        Ok(parsed_msgs)
     }
 
     /// ⚡ OPTIMIZED FOR MAX SPEED: Fires typing indicator down persistent TCP pool

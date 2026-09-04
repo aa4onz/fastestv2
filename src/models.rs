@@ -15,7 +15,7 @@ pub struct Server {
     pub channels: Vec<Channel>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MessageStatus { Sending, Delivered, Failed }
 
 #[derive(Debug, Clone)]
@@ -37,6 +37,9 @@ pub enum AppEvent {
     SetSelfUsername(String),
     HttpTriggerTyping,
     HttpSendChat { nonce: String, text: String },
+    FetchChannelHistory(String),
+    LoadChannelHistory(Vec<DiscordMessage>),
+    SwitchChannel(String),
     UpdateGatewayRtt { rtt_ms: u64, offset_ms: i64 },
     UpdateClockOffset(i64),
     ToggleTimestamp,
@@ -57,4 +60,23 @@ pub struct GatewayPayload {
     pub d: serde_json::Value,
     #[serde(default)]
     pub t: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct DiscordApiMessage {
+    pub id: String,
+    #[serde(default)]
+    pub nonce: Option<serde_json::Value>,
+    #[serde(default)]
+    pub content: String,
+    pub author: DiscordApiAuthor,
+    #[serde(default)]
+    pub timestamp: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct DiscordApiAuthor {
+    pub username: String,
+    #[serde(default)]
+    pub global_name: Option<String>,
 }
