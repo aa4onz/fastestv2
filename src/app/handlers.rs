@@ -219,12 +219,12 @@ impl crate::app::state::AppState {
                             self.list_state.select(Some(self.messages.len() - 1));
                         }
                     }
-                    KeyCode::Up if self.input_text.is_empty() => {
+                    KeyCode::Up if self.input_text.is_empty() || k.modifiers.contains(KeyModifiers::SHIFT) || k.modifiers.contains(KeyModifiers::ALT) => {
                         let current = self.list_state.selected().unwrap_or(0);
                         let new_idx = current.saturating_sub(1);
                         self.list_state.select(Some(new_idx));
                     }
-                    KeyCode::Down if self.input_text.is_empty() => {
+                    KeyCode::Down if self.input_text.is_empty() || k.modifiers.contains(KeyModifiers::SHIFT) || k.modifiers.contains(KeyModifiers::ALT) => {
                         let current = self.list_state.selected().unwrap_or(0);
                         let max_idx = self.messages.len().saturating_sub(1);
                         let new_idx = (current + 1).min(max_idx);
