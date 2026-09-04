@@ -12,6 +12,23 @@ impl crate::app::state::AppState {
         tx: &Sender<AppEvent>,
     ) -> bool {
         match event {
+            AppEvent::ToggleLatency => {
+                self.show_latency = !self.show_latency;
+            }
+            AppEvent::ScrollChat(delta) => {
+                if delta < 0 {
+                    let amount = (-delta) as usize;
+                    let current = self.list_state.selected().unwrap_or(0);
+                    let new_idx = current.saturating_sub(amount);
+                    self.list_state.select(Some(new_idx));
+                } else if delta > 0 {
+                    let amount = delta as usize;
+                    let current = self.list_state.selected().unwrap_or(0);
+                    let max_idx = self.messages.len().saturating_sub(1);
+                    let new_idx = (current + amount).min(max_idx);
+                    self.list_state.select(Some(new_idx));
+                }
+            }
             AppEvent::UpdateClockOffset(offset_ms) => {
                 self.clock_offset_ms = Some(offset_ms);
             }
@@ -35,6 +52,10 @@ impl crate::app::state::AppState {
                     .any(|x| x.nonce == m.nonce && !m.nonce.is_empty())
                 {
                     self.messages.push(m);
+                }
+                // Auto-scroll to bottom on new incoming message
+                if !self.messages.is_empty() {
+                    self.list_state.select(Some(self.messages.len() - 1));
                 }
             }
             AppEvent::MessageSent { nonce, timestamp } => {
@@ -82,6 +103,41 @@ impl crate::app::state::AppState {
                 }
 
                 match k.code {
+                    KeyCode::F(2) => {
+                        self.show_latency = !self.show_latency;
+                    }
+                    KeyCode::PageUp => {
+                        let current = self.list_state.selected().unwrap_or(0);
+                        let new_idx = current.saturating_sub(10);
+                        self.list_state.select(Some(new_idx));
+                    }
+                    KeyCode::PageDown => {
+                        let current = self.list_state.selected().unwrap_or(0);
+                        let max_idx = self.messages.len().saturating_sub(1);
+                        let new_idx = (current + 10).min(max_idx);
+                        self.list_state.select(Some(new_idx));
+                    }
+                    KeyCode::Home => {
+                        if !self.messages.is_empty() {
+                            self.list_state.select(Some(0));
+                        }
+                    }
+                    KeyCode::End => {
+                        if !self.messages.is_empty() {
+                            self.list_state.select(Some(self.messages.len() - 1));
+                        }
+                    }
+                    KeyCode::Up if self.input_text.is_empty() => {
+                        let current = self.list_state.selected().unwrap_or(0);
+                        let new_idx = current.saturating_sub(1);
+                        self.list_state.select(Some(new_idx));
+                    }
+                    KeyCode::Down if self.input_text.is_empty() => {
+                        let current = self.list_state.selected().unwrap_or(0);
+                        let max_idx = self.messages.len().saturating_sub(1);
+                        let new_idx = (current + 1).min(max_idx);
+                        self.list_state.select(Some(new_idx));
+                    }
                     KeyCode::Tab => {
                         if let Some(last_failed_nonce) = self.failed_nonces.last().cloned() {
                             let (text, found) = if let Some(m) = self.messages.iter_mut().find(|x| x.nonce == last_failed_nonce) {
@@ -133,6 +189,10 @@ impl crate::app::state::AppState {
                             timestamp: format!("{} | ...", current_time_str),
                             status: MessageStatus::Sending,
                         });
+
+                        if !self.messages.is_empty() {
+                            self.list_state.select(Some(self.messages.len() - 1));
+                        }
 
                         let _ = tx.send(AppEvent::HttpSendChat { nonce, text }).await;
                     }
