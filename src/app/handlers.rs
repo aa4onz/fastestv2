@@ -2,7 +2,7 @@
 use crate::app::state::ActiveModal;
 use crate::models::{AppEvent, DiscordMessage, MessageStatus};
 use chrono::Local;
-use crossterm::event::{Event, KeyCode, KeyModifiers};
+use crossterm::event::{Event, KeyCode, KeyModifiers, MouseEventKind};
 use std::time::Instant;
 use tokio::sync::mpsc::Sender;
 
@@ -112,6 +112,20 @@ impl crate::app::state::AppState {
                     status: MessageStatus::Failed,
                 });
             }
+            AppEvent::Terminal(Event::Mouse(m)) => match m.kind {
+                MouseEventKind::ScrollUp => {
+                    let current = self.list_state.selected().unwrap_or(0);
+                    let new_idx = current.saturating_sub(3);
+                    self.list_state.select(Some(new_idx));
+                }
+                MouseEventKind::ScrollDown => {
+                    let current = self.list_state.selected().unwrap_or(0);
+                    let max_idx = self.messages.len().saturating_sub(1);
+                    let new_idx = (current + 3).min(max_idx);
+                    self.list_state.select(Some(new_idx));
+                }
+                _ => {}
+            },
             AppEvent::Terminal(Event::Key(k))
                 if k.kind == crossterm::event::KeyEventKind::Press =>
             {
