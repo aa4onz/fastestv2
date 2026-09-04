@@ -43,7 +43,6 @@ pub async fn run_gateway_loop(app_state: Arc<Mutex<AppState>>, event_tx: Sender<
                         });
 
                         let w_tx = event_tx.clone();
-                        let state_ref = Arc::clone(&app_state);
 
                         while let Some(Ok(Message::Text(msg_text))) = read.next().await {
                             if let Ok(pay) = serde_json::from_str::<GatewayPayload>(&msg_text) {
@@ -58,7 +57,6 @@ pub async fn run_gateway_loop(app_state: Arc<Mutex<AppState>>, event_tx: Sender<
 
                                     // One-way transit estimate (RTT / 2)
                                     let estimated_one_way = (rtt / 2) as i64;
-                                    let now_utc_ms = chrono::Utc::now().timestamp_millis();
                                     let clock_offset = estimated_one_way;
 
                                     let _ = w_tx.send(AppEvent::UpdateGatewayRtt {
@@ -79,11 +77,6 @@ pub async fn run_gateway_loop(app_state: Arc<Mutex<AppState>>, event_tx: Sender<
                                     } else if ev == "MESSAGE_CREATE" && pay.d["channel_id"].as_str() == Some(&target_cid) {
                                         let msg_id_str = pay.d["id"].as_str().unwrap_or("0");
                                         let current_time_str = chrono::Local::now().format("%H:%M:%S%.3f").to_string();
-                                        
-                                        let state = state_ref.lock().await;
-                                        let clock_offset = state.clock_offset_ms.unwrap_or(0);
-                                        let is_dup = state.messages.iter().any(|x| x.nonce == pay.d["nonce"].as_str().unwrap_or("") && !x.nonce.is_empty());
-                                        drop(state);
 
                                         let transit_time_str = if let Ok(msg_id) = msg_id_str.parse::<u64>() {
                                             let discord_epoch_ms = (msg_id >> 22) + 1420070400000;
@@ -91,7 +84,7 @@ pub async fn run_gateway_loop(app_state: Arc<Mutex<AppState>>, event_tx: Sender<
                                             let diff = if local_now_ms >= discord_epoch_ms as i64 {
                                                 (local_now_ms - discord_epoch_ms as i64) as u64
                                             } else {
-                                                (clock_offset as u64).max(1)
+                                                1
                                             };
 
                                             format!("{} | {}ms", current_time_str, diff)
@@ -101,24 +94,22 @@ pub async fn run_gateway_loop(app_state: Arc<Mutex<AppState>>, event_tx: Sender<
 
                                         let nonce = pay.d["nonce"].as_str().unwrap_or("").to_string();
 
-                                        if !is_dup {
-                                            let member_nick = pay.d["member"]["nick"].as_str().filter(|s| !s.is_empty());
-                                            let global_name = pay.d["author"]["global_name"].as_str().filter(|s| !s.is_empty());
-                                            let username = pay.d["author"]["username"].as_str().unwrap_or("Unknown");
+                                        let member_nick = pay.d["member"]["nick"].as_str().filter(|s| !s.is_empty());
+                                        let global_name = pay.d["author"]["global_name"].as_str().filter(|s| !s.is_empty());
+                                        let username = pay.d["author"]["username"].as_str().unwrap_or("Unknown");
 
-                                            let author = member_nick
-                                                .or(global_name)
-                                                .unwrap_or(username)
-                                                .to_string();
+                                        let author = member_nick
+                                            .or(global_name)
+                                            .unwrap_or(username)
+                                            .to_string();
 
-                                            let _ = w_tx.send(AppEvent::IncomingMessage(DiscordMessage {
-                                                nonce,
-                                                author,
-                                                content: pay.d["content"].as_str().unwrap_or("").to_string(),
-                                                timestamp: transit_time_str,
-                                                status: MessageStatus::Delivered,
-                                            })).await;
-                                        }
+                                        let _ = w_tx.send(AppEvent::IncomingMessage(DiscordMessage {
+                                            nonce,
+                                            author,
+                                            content: pay.d["content"].as_str().unwrap_or("").to_string(),
+                                            timestamp: transit_time_str,
+                                            status: MessageStatus::Delivered,
+                                        })).await;
                                     }
                                 }
                             }
