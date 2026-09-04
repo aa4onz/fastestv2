@@ -2,7 +2,7 @@
 pub mod models;
 pub mod network;
 pub mod app;
-pub mod ui;
+pub mod tui;
 
 use models::AppEvent;
 use std::io::{self, Write};
@@ -72,7 +72,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         headers.insert("sec-fetch-site", "same-origin".parse().unwrap());
         headers.insert("x-debug-options", "bugReporterEnabled".parse().unwrap());
         headers.insert("x-discord-timezone", "America/New_York".parse().unwrap());
-        headers.insert("x-super-properties", "eyJvcyI6IldpbmRvd3MiLCJicm93c2VyIjoiQ2hyb21lIiwiZGV2aWNlIjoiIiwicmVmZXJyZXIiOiJodHRwczovL2Rpc2NvcmQuY29tLyIsIm9zX3ZlcnNpb24iOiIxMCIsImJyb3dzZXJfdmVyc2lvbiI6IjEyOC4wLjAuMCIsImJsdWV0b290aF9lbmFibGVkIjpmYWxzZX0=".parse().unwrap());
+        headers.insert("x-super-properties", "eyJvcyI6IldpbmRvd3MiLCJicm93c2VyIjoiQ2hyb21lIiwiZGV2aWNlIjoiIiwicmVmZXJyZXIiOiJodHRwczovL2Rpc2NvcmQuY29tLyIsIm9zX3ZlcnNpb24iOiIxMCIsImJyb3dzZXJfdmVyc2lvbiI6IxEyOC4wLjAuMCIsImJsdWV0b290aF9lbmFibGVkIjpmYWxzZX0=".parse().unwrap());
 
         let http_client = reqwest::Client::builder()
             .tcp_nodelay(true)
@@ -104,7 +104,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             terminal.draw(|f| {
                 if let Ok(mut state) = app_state_clone.try_lock() {
-                    ui::render(f, &mut state);
+                    tui::render(f, &mut state);
                 }
             })?;
         }
