@@ -1,5 +1,6 @@
 // src/network/http.rs
 use crate::models::{Channel, DiscordApiMessage, DiscordMessage, MessageStatus, Server};
+use chrono::Local;
 
 pub struct DiscordHttpClient {
     pub client: reqwest::Client,
@@ -56,10 +57,16 @@ impl DiscordHttpClient {
 
         for msg in api_msgs.into_iter().rev() {
             let author = msg.author.global_name.unwrap_or(msg.author.username);
-            let time_formatted = if msg.timestamp.len() >= 19 {
-                msg.timestamp[11..19].to_string()
-            } else {
-                msg.timestamp
+            
+            let time_formatted = match chrono::DateTime::parse_from_rfc3339(&msg.timestamp) {
+                Ok(dt) => dt.with_timezone(&Local).format("%H:%M:%S%.3f").to_string(),
+                Err(_) => {
+                    if msg.timestamp.len() >= 19 {
+                        msg.timestamp[11..19].to_string()
+                    } else {
+                        msg.timestamp
+                    }
+                }
             };
 
             let nonce_str = match msg.nonce {
