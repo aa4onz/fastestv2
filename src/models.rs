@@ -37,6 +37,7 @@ pub enum AppEvent {
     SetSelfUsername(String),
     HttpTriggerTyping,
     HttpSendChat { nonce: String, text: String },
+    UpdateGatewayRtt { rtt_ms: u64, offset_ms: i64 },
 }
 
 #[derive(Serialize)]

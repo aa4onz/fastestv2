@@ -12,6 +12,10 @@ impl crate::app::state::AppState {
         tx: &Sender<AppEvent>,
     ) -> bool {
         match event {
+            AppEvent::UpdateGatewayRtt { rtt_ms, offset_ms } => {
+                self.gateway_rtt_ms = Some(rtt_ms);
+                self.clock_offset_ms = Some(offset_ms);
+            }
             AppEvent::SetSelfUsername(username) => {
                 if !username.is_empty() {
                     self.self_username = username;

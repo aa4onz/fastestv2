@@ -3,6 +3,7 @@ use crate::app::state::AppState;
 use crate::models::{AppEvent, DiscordMessage, GatewayPayload, MessageStatus};
 use futures_util::{SinkExt, StreamExt};
 use std::sync::Arc;
+use std::time::Instant;
 use tokio::sync::{mpsc::Sender, Mutex};
 use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 
@@ -28,11 +29,15 @@ pub async fn run_gateway_loop(app_state: Arc<Mutex<AppState>>, event_tx: Sender<
                         let state_clone = Arc::clone(&app_state);
                         let shared_w = Arc::new(Mutex::new(write));
                         let h_write = Arc::clone(&shared_w);
-                        
+
+                        let last_hb_send = Arc::new(Mutex::new(Option::<Instant>::None));
+                        let last_hb_send_clone = Arc::clone(&last_hb_send);
+
                         tokio::spawn(async move {
                             loop {
                                 tokio::time::sleep(std::time::Duration::from_millis(interval)).await;
                                 if state_clone.lock().await.token.is_empty() { break; }
+                                *last_hb_send_clone.lock().await = Some(Instant::now());
                                 if h_write.lock().await.send(Message::Text(serde_json::json!({"op": 1, "d": null}).to_string())).await.is_err() { break; }
                             }
                         });
@@ -42,7 +47,27 @@ pub async fn run_gateway_loop(app_state: Arc<Mutex<AppState>>, event_tx: Sender<
 
                         while let Some(Ok(Message::Text(msg_text))) = read.next().await {
                             if let Ok(pay) = serde_json::from_str::<GatewayPayload>(&msg_text) {
-                                if pay.op == 0 {
+                                if pay.op == 11 {
+                                    // Heartbeat ACK received - calculate WebSocket ping & clock offset
+                                    let now_inst = Instant::now();
+                                    let now_utc_ms = chrono::Utc::now().timestamp_millis();
+
+                                    let rtt = if let Some(sent_at) = *last_hb_send.lock().await {
+                                        now_inst.duration_since(sent_at).as_millis() as u64
+                                    } else {
+                                        0
+                                    };
+
+                                    // Estimated Server time at receipt is roughly (now - RTT/2)
+                                    let estimated_one_way = (rtt / 2) as i64;
+                                    let server_estimated_ms = now_utc_ms - estimated_one_way;
+                                    let clock_offset = now_utc_ms - server_estimated_ms;
+
+                                    let _ = w_tx.send(AppEvent::UpdateGatewayRtt {
+                                        rtt_ms: rtt,
+                                        offset_ms: clock_offset,
+                                    }).await;
+                                } else if pay.op == 0 {
                                     let ev = pay.t.as_deref().unwrap_or("");
 
                                     if ev == "READY" {
@@ -57,11 +82,19 @@ pub async fn run_gateway_loop(app_state: Arc<Mutex<AppState>>, event_tx: Sender<
                                         let msg_id_str = pay.d["id"].as_str().unwrap_or("0");
                                         let current_time_str = chrono::Local::now().format("%H:%M:%S%.3f").to_string();
                                         
+                                        let state = state_ref.lock().await;
+                                        let clock_offset = state.clock_offset_ms.unwrap_or(0);
+                                        let is_dup = state.messages.iter().any(|x| x.nonce == pay.d["nonce"].as_str().unwrap_or("") && !x.nonce.is_empty());
+                                        drop(state);
+
                                         let transit_time_str = if let Ok(msg_id) = msg_id_str.parse::<u64>() {
                                             let discord_epoch_ms = (msg_id >> 22) + 1420070400000;
-                                            let now_ms = chrono::Utc::now().timestamp_millis() as u64;
-                                            if now_ms >= discord_epoch_ms {
-                                                let diff = now_ms - discord_epoch_ms;
+                                            let local_now_ms = chrono::Utc::now().timestamp_millis();
+                                            // Correct local clock skew using calculated clock offset
+                                            let corrected_now_ms = local_now_ms - clock_offset;
+
+                                            if corrected_now_ms >= (discord_epoch_ms as i64) {
+                                                let diff = (corrected_now_ms - discord_epoch_ms as i64) as u64;
                                                 format!("{} | {}ms", current_time_str, diff)
                                             } else {
                                                 current_time_str.clone()
@@ -71,12 +104,8 @@ pub async fn run_gateway_loop(app_state: Arc<Mutex<AppState>>, event_tx: Sender<
                                         };
 
                                         let nonce = pay.d["nonce"].as_str().unwrap_or("").to_string();
-                                        let state = state_ref.lock().await;
-                                        let is_dup = state.messages.iter().any(|x| x.nonce == nonce && !nonce.is_empty());
-                                        drop(state);
 
                                         if !is_dup {
-                                            // Priority: Server Nickname -> Global Display Name -> Handle/Username
                                             let member_nick = pay.d["member"]["nick"].as_str().filter(|s| !s.is_empty());
                                             let global_name = pay.d["author"]["global_name"].as_str().filter(|s| !s.is_empty());
                                             let username = pay.d["author"]["username"].as_str().unwrap_or("Unknown");

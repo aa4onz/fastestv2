@@ -14,6 +14,8 @@ pub struct AppState {
     pub failed_nonces: Vec<String>,
     pub last_typing_sent: Option<Instant>,
     pub outbound_timers: HashMap<String, Instant>,
+    pub gateway_rtt_ms: Option<u64>,
+    pub clock_offset_ms: Option<i64>,
 }
 
 impl AppState {
@@ -31,6 +33,8 @@ impl AppState {
             failed_nonces: Vec::new(),
             last_typing_sent: None,
             outbound_timers: HashMap::new(),
+            gateway_rtt_ms: None,
+            clock_offset_ms: None,
         }
     }
 }
