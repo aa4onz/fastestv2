@@ -56,10 +56,6 @@ pub fn spawn_network_handlers(
                         let res = client.send_message(&channel_id, &text, &nonce).await;
 
                         if let Ok(resp) = res {
-                            if let Some(offset) = DiscordHttpClient::extract_clock_offset(&resp) {
-                                let _ = tx.send(AppEvent::UpdateClockOffset(offset)).await;
-                            }
-
                             if resp.status().is_success() {
                                 let _ = tx.send(AppEvent::MessageSent {
                                     nonce,

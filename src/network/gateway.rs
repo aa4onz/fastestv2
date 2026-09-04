@@ -48,20 +48,18 @@ pub async fn run_gateway_loop(app_state: Arc<Mutex<AppState>>, event_tx: Sender<
                         while let Some(Ok(Message::Text(msg_text))) = read.next().await {
                             if let Ok(pay) = serde_json::from_str::<GatewayPayload>(&msg_text) {
                                 if pay.op == 11 {
-                                    // Heartbeat ACK received - calculate WebSocket ping & clock offset
+                                    // High-resolution Gateway Heartbeat ACK
                                     let now_inst = Instant::now();
-                                    let now_utc_ms = chrono::Utc::now().timestamp_millis();
-
                                     let rtt = if let Some(sent_at) = *last_hb_send.lock().await {
                                         now_inst.duration_since(sent_at).as_millis() as u64
                                     } else {
                                         0
                                     };
 
-                                    // Estimated Server time at receipt is roughly (now - RTT/2)
+                                    // One-way transit estimate (RTT / 2)
                                     let estimated_one_way = (rtt / 2) as i64;
-                                    let server_estimated_ms = now_utc_ms - estimated_one_way;
-                                    let clock_offset = now_utc_ms - server_estimated_ms;
+                                    let now_utc_ms = chrono::Utc::now().timestamp_millis();
+                                    let clock_offset = estimated_one_way;
 
                                     let _ = w_tx.send(AppEvent::UpdateGatewayRtt {
                                         rtt_ms: rtt,
@@ -90,9 +88,11 @@ pub async fn run_gateway_loop(app_state: Arc<Mutex<AppState>>, event_tx: Sender<
                                         let transit_time_str = if let Ok(msg_id) = msg_id_str.parse::<u64>() {
                                             let discord_epoch_ms = (msg_id >> 22) + 1420070400000;
                                             let local_now_ms = chrono::Utc::now().timestamp_millis();
-                                            // Correct local clock skew using calculated clock offset
-                                            let corrected_now_ms = local_now_ms - clock_offset;
-                                            let diff = (corrected_now_ms - discord_epoch_ms as i64).abs() as u64;
+                                            let diff = if local_now_ms >= discord_epoch_ms as i64 {
+                                                (local_now_ms - discord_epoch_ms as i64) as u64
+                                            } else {
+                                                (clock_offset as u64).max(1)
+                                            };
 
                                             format!("{} | {}ms", current_time_str, diff)
                                         } else {

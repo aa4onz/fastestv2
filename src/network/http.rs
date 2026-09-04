@@ -1,6 +1,5 @@
 // src/network/http.rs
 use crate::models::{Channel, Server};
-use chrono::DateTime;
 
 pub struct DiscordHttpClient {
     pub client: reqwest::Client,
@@ -10,20 +9,6 @@ pub struct DiscordHttpClient {
 impl DiscordHttpClient {
     pub fn new(client: reqwest::Client, token: String) -> Self {
         Self { client, token }
-    }
-
-    /// Helper method to extract clock offset from HTTP Date headers
-    pub fn extract_clock_offset(resp: &reqwest::Response) -> Option<i64> {
-        if let Some(date_header) = resp.headers().get(reqwest::header::DATE) {
-            if let Ok(date_str) = date_header.to_str() {
-                if let Ok(server_time) = DateTime::parse_from_rfc2822(date_str) {
-                    let server_ms = server_time.timestamp_millis();
-                    let local_ms = chrono::Utc::now().timestamp_millis();
-                    return Some(local_ms - server_ms);
-                }
-            }
-        }
-        None
     }
 
     /// Fetches all guilds (servers) the user belongs to
