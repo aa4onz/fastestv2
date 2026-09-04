@@ -1,19 +1,19 @@
 // src/tui/components.rs
-use crate::app::AppState;
-use crate::models::MessageStatus;
+use crate::models::{DiscordMessage, MessageStatus};
 use ratatui::{
     style::{Color, Style},
     text::{Line, Span},
     widgets::{Block, Borders, List, ListItem, Paragraph},
 };
 
-pub fn render_messages<'a>(state: &'a AppState) -> (List<'a>, String) {
-    let self_user = &state.self_username;
-    let show_time = state.show_timestamp;
-    let show_lat = state.show_latency;
-
-    let msgs: Vec<ListItem> = state.messages.iter().map(|m| {
-        let is_me = m.author == *self_user;
+pub fn render_messages<'a>(
+    messages: &'a [DiscordMessage],
+    self_user: &str,
+    show_time: bool,
+    show_lat: bool,
+) -> List<'a> {
+    let msgs: Vec<ListItem> = messages.iter().map(|m| {
+        let is_me = m.author == self_user;
         let author_color = if is_me { Color::Blue } else { Color::Green };
         let header_style = Style::default().fg(author_color);
 
@@ -73,12 +73,10 @@ pub fn render_messages<'a>(state: &'a AppState) -> (List<'a>, String) {
     let lat_status = if show_lat { "F3: Hide Latency" } else { "F3: Show Latency" };
     let title_text = format!(" messages [{} | {} | Ctrl+G/F5: Channel | Ctrl+X/F4: Switch Token] ", time_status, lat_status);
 
-    let msg_list = List::new(msgs)
+    List::new(msgs)
         .block(Block::default()
             .borders(Borders::ALL)
-            .title(title_text));
-
-    (msg_list, state.input_text.clone())
+            .title(title_text))
 }
 
 pub fn render_input_box<'a>(input_text: &'a str) -> Paragraph<'a> {

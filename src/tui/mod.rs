@@ -32,10 +32,15 @@ pub fn render(f: &mut Frame, state: &mut AppState) {
         ])
         .split(middle_area);
 
-    let (msg_list, input_text) = components::render_messages(state);
+    let msg_list = components::render_messages(
+        &state.messages,
+        &state.self_username,
+        state.show_timestamp,
+        state.show_latency,
+    );
     f.render_stateful_widget(msg_list, vertical_chunks[0], &mut state.list_state);
 
-    let input_box = components::render_input_box(&input_text);
+    let input_box = components::render_input_box(&state.input_text);
     f.render_widget(input_box, vertical_chunks[1]);
 
     // Render Modal Overlays
