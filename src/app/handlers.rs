@@ -56,6 +56,7 @@ impl crate::app::state::AppState {
             AppEvent::SwitchChannel(new_channel_id) => {
                 if !new_channel_id.is_empty() {
                     self.target_channel_id = new_channel_id.clone();
+                    let _ = std::fs::write(".channel_cache", &new_channel_id);
                     self.messages.clear();
                     let _ = tx.send(AppEvent::FetchChannelHistory(new_channel_id)).await;
                 }
@@ -139,6 +140,7 @@ impl crate::app::state::AppState {
                         ActiveModal::LogoutPrompt => match k.code {
                             KeyCode::Char('y') | KeyCode::Char('Y') => {
                                 let _ = std::fs::remove_file(".token_cache");
+                                let _ = std::fs::remove_file(".channel_cache");
                                 return true;
                             }
                             KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => {

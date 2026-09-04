@@ -25,16 +25,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             std::fs::write(".token_cache", &token)?;
         }
 
-        print!("Enter direct Discord Channel URL link: ");
-        io::stdout().flush()?;
-        io::stdin().read_line(&mut url_input)?;
-        url_input = url_input.trim().to_string();
+        if std::path::Path::new(".channel_cache").exists() {
+            url_input = std::fs::read_to_string(".channel_cache")?.trim().to_string();
+        } else {
+            print!("Enter direct Discord Channel URL link: ");
+            io::stdout().flush()?;
+            io::stdin().read_line(&mut url_input)?;
+            url_input = url_input.trim().to_string();
+        }
 
         let target_channel_id = url_input.split('/').last().unwrap_or("").to_string();
         if target_channel_id.is_empty() || !target_channel_id.chars().all(|c| c.is_numeric()) {
             println!("Error: Invalid Discord Channel URL provided!");
+            let _ = std::fs::remove_file(".channel_cache");
             continue;
         }
+
+        std::fs::write(".channel_cache", &target_channel_id)?;
 
         crossterm::terminal::enable_raw_mode()?;
         let mut stdout = io::stdout();
