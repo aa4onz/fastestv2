@@ -100,12 +100,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
 
-            let app_state_clone = Arc::clone(&app_state);
-
+            let mut state = app_state.lock().await;
             terminal.draw(|f| {
-                if let Ok(mut state) = app_state_clone.try_lock() {
-                    tui::render(f, &mut state);
-                }
+                tui::render(f, &mut state);
             })?;
         }
 
