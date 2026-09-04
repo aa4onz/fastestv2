@@ -6,6 +6,7 @@ use std::time::Instant;
 pub struct AppState {
     pub token: String,
     pub target_channel_id: String,
+    pub self_username: String,
     pub messages: Vec<DiscordMessage>,
     pub input_text: String,
     pub list_state: ListState,
@@ -21,6 +22,7 @@ impl AppState {
         Self {
             token,
             target_channel_id: String::new(),
+            self_username: "You".to_string(),
             messages: Vec::new(),
             input_text: String::new(),
             list_state,

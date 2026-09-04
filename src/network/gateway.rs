@@ -44,18 +44,22 @@ pub async fn run_gateway_loop(app_state: Arc<Mutex<AppState>>, event_tx: Sender<
                             if let Ok(pay) = serde_json::from_str::<GatewayPayload>(&msg_text) {
                                 if pay.op == 0 {
                                     let ev = pay.t.as_deref().unwrap_or("");
-                                    
-                                    if ev == "MESSAGE_CREATE" && pay.d["channel_id"].as_str() == Some(&target_cid) {
+
+                                    if ev == "READY" {
+                                        if let Some(uname) = pay.d["user"]["username"].as_str() {
+                                            let _ = w_tx.send(AppEvent::SetSelfUsername(uname.to_string())).await;
+                                        }
+                                    } else if ev == "MESSAGE_CREATE" && pay.d["channel_id"].as_str() == Some(&target_cid) {
                                         let msg_id_str = pay.d["id"].as_str().unwrap_or("0");
-                                        let current_time_str = chrono::Local::now().format("%H:%M:%S").to_string();
+                                        let current_time_str = chrono::Local::now().format("%H:%M:%S%.3f").to_string();
                                         
                                         let transit_time_str = if let Ok(msg_id) = msg_id_str.parse::<u64>() {
                                             let discord_epoch_ms = (msg_id >> 22) + 1420070400000;
                                             let current_ms = chrono::Utc::now().timestamp_millis() as u64;
                                             let diff = current_ms.saturating_sub(discord_epoch_ms);
-                                            format!("{} | Recv {}ms", current_time_str, diff)
+                                            format!("{} | {}ms", current_time_str, diff)
                                         } else {
-                                            format!("{} | Recv", current_time_str)
+                                            current_time_str
                                         };
 
                                         let nonce = pay.d["nonce"].as_str().unwrap_or("").to_string();
@@ -64,9 +68,10 @@ pub async fn run_gateway_loop(app_state: Arc<Mutex<AppState>>, event_tx: Sender<
                                         drop(state);
 
                                         if !is_dup {
+                                            let author = pay.d["author"]["username"].as_str().unwrap_or("Unknown").to_string();
                                             let _ = w_tx.send(AppEvent::IncomingMessage(DiscordMessage {
                                                 nonce,
-                                                author: pay.d["author"]["username"].as_str().unwrap_or("Unknown").to_string(),
+                                                author,
                                                 content: pay.d["content"].as_str().unwrap_or("").to_string(),
                                                 timestamp: transit_time_str,
                                                 status: MessageStatus::Delivered,

@@ -1,7 +1,6 @@
 // src/models.rs
 use serde::{Deserialize, Serialize};
 
-// 1. ADDED: Added back missing Server and Channel objects for network/http.rs
 #[derive(Debug, Clone, Deserialize)]
 pub struct Channel {
     pub id: String,
@@ -35,7 +34,7 @@ pub enum AppEvent {
     MessageFailed { nonce: String },
     Terminal(crossterm::event::Event),
     GatewayClosed,
-    // 2. ADDED: Lightning-fast background worker variants to stop Codespace typing lag
+    SetSelfUsername(String),
     HttpTriggerTyping,
     HttpSendChat { nonce: String, text: String },
 }

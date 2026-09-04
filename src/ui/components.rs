@@ -42,7 +42,7 @@ pub fn render_chat_feed(state: &AppState, theme: &Theme, available_rows: usize) 
                 chat_lines.push(Line::from(vec![Span::styled(format!("  {}", msg.content), theme.system_text)]));
             }
             MessageStatus::Delivered => {
-                let author_style = if msg.author == "You" { theme.self_message } else { theme.peer_message };
+                let author_style = if msg.author == state.self_username { theme.self_message } else { theme.peer_message };
                 chat_lines.push(Line::from(vec![
                     Span::styled(msg.author.clone(), author_style),
                     Span::styled(format!(" [{}]", msg.timestamp), Style::default().fg(Color::Gray)),
@@ -61,7 +61,6 @@ pub fn render_chat_feed(state: &AppState, theme: &Theme, available_rows: usize) 
         }
     }
 
-    // Handle typing notifications footer text
     let footer_text = match state.typing_users.get(&state.current_channel_id()) {
         Some(typers) if !typers.is_empty() => {
             let names: Vec<String> = typers.keys().cloned().collect();

@@ -11,6 +11,11 @@ impl crate::app::state::AppState {
         tx: &Sender<AppEvent>,
     ) -> bool {
         match event {
+            AppEvent::SetSelfUsername(username) => {
+                if !username.is_empty() {
+                    self.self_username = username;
+                }
+            }
             AppEvent::IncomingMessage(m) => {
                 if m.nonce.starts_with("err-") {
                     self.messages.push(m);
@@ -26,17 +31,15 @@ impl crate::app::state::AppState {
                 if let Some(m) = self.messages.iter_mut().find(|x| x.nonce == nonce) {
                     m.status = MessageStatus::Delivered;
                     
-                    // TOTAL-TOTAL LATENCY CALCULATOR: Extracts the original keystroke timestamp
                     if let Some(stripped_nonce) = nonce.strip_prefix("n-") {
-                        if let Ok(creation_nanos) = stripped_nonce.parse::<i64>() {
-                            let current_nanos = chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0);
-                            let total_absolute_diff_ms = (current_nanos - creation_nanos) / 1_000_000;
+                        if let Ok(creation_ms) = stripped_nonce.parse::<i64>() {
+                            let current_ms = chrono::Utc::now().timestamp_millis();
+                            let total_diff_ms = (current_ms - creation_ms).max(0);
                             
-                            // Displays your absolute true real-world lag covering the entire global trip
                             m.timestamp = format!(
-                                "{} | Total True {}ms",
-                                Local::now().format("%H:%M:%S"),
-                                total_absolute_diff_ms
+                                "{} | {}ms",
+                                Local::now().format("%H:%M:%S%.3f"),
+                                total_diff_ms
                             );
                         }
                     } else if !timestamp.is_empty() {
@@ -59,7 +62,7 @@ impl crate::app::state::AppState {
                     nonce: "err-close".into(),
                     author: "System".into(),
                     content: "⚠️ WebSocket closed. Reconnecting...".into(),
-                    timestamp: Local::now().format("%H:%M:%S").to_string(),
+                    timestamp: Local::now().format("%H:%M:%S%.3f").to_string(),
                     status: MessageStatus::Failed,
                 });
             }
@@ -75,7 +78,7 @@ impl crate::app::state::AppState {
                         if let Some(last_failed_nonce) = self.failed_nonces.last().cloned() {
                             let (text, found) = if let Some(m) = self.messages.iter_mut().find(|x| x.nonce == last_failed_nonce) {
                                 m.status = MessageStatus::Sending;
-                                m.timestamp = format!("{} | ...", Local::now().format("%H:%M:%S"));
+                                m.timestamp = format!("{} | ...", Local::now().format("%H:%M:%S%.3f"));
                                 (m.content.clone(), true)
                             } else {
                                 (String::new(), false)
@@ -92,7 +95,6 @@ impl crate::app::state::AppState {
                     KeyCode::Char(c) => {
                         self.input_text.push(c);
                         
-                        // Local check instantly forwards typing triggers without blocking UI rendering
                         let trigger = match self.last_typing_sent {
                             Some(last_sent) => last_sent.elapsed() >= std::time::Duration::from_secs(7),
                             None => true,
@@ -109,12 +111,13 @@ impl crate::app::state::AppState {
                     KeyCode::Enter if !self.input_text.is_empty() => {
                         self.last_typing_sent = None;
                         let text = std::mem::take(&mut self.input_text);
-                        let nonce = format!("n-{}", chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0));
-                        let current_time_str = Local::now().format("%H:%M:%S").to_string();
+                        let creation_ms = chrono::Utc::now().timestamp_millis();
+                        let nonce = format!("n-{}", creation_ms);
+                        let current_time_str = Local::now().format("%H:%M:%S%.3f").to_string();
 
                         self.messages.push(DiscordMessage {
                             nonce: nonce.clone(),
-                            author: "You".to_string(),
+                            author: self.self_username.clone(),
                             content: text.clone(),
                             timestamp: format!("{} | ...", current_time_str),
                             status: MessageStatus::Sending,
