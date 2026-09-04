@@ -72,10 +72,14 @@ pub async fn run_gateway_loop(app_state: Arc<Mutex<AppState>>, event_tx: Sender<
                                         drop(state);
 
                                         if !is_dup {
-                                            let author = pay.d["author"]["global_name"]
-                                                .as_str()
-                                                .filter(|s| !s.is_empty())
-                                                .unwrap_or_else(|| pay.d["author"]["username"].as_str().unwrap_or("Unknown"))
+                                            // Priority: Server Nickname -> Global Display Name -> Handle/Username
+                                            let member_nick = pay.d["member"]["nick"].as_str().filter(|s| !s.is_empty());
+                                            let global_name = pay.d["author"]["global_name"].as_str().filter(|s| !s.is_empty());
+                                            let username = pay.d["author"]["username"].as_str().unwrap_or("Unknown");
+
+                                            let author = member_nick
+                                                .or(global_name)
+                                                .unwrap_or(username)
                                                 .to_string();
 
                                             let _ = w_tx.send(AppEvent::IncomingMessage(DiscordMessage {
