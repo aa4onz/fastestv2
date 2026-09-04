@@ -29,41 +29,35 @@ pub fn render_messages<'a>(state: &AppState) -> (List<'a>, String) {
             MessageStatus::Delivered => "",
         };
 
-        // Split timestamp string into time component and latency component
-        let parts: Vec<&str> = m.timestamp.split('|').map(|s| s.trim()).collect();
-        let time_part = parts.first().copied().unwrap_or("");
-        let lat_part = parts.get(1).copied().unwrap_or("");
+        let header_line = if show_time || show_lat {
+            let mut parts = m.timestamp.split('|');
+            let time_part = parts.next().unwrap_or("").trim();
+            let lat_part = parts.next().unwrap_or("").trim();
 
-        let mut meta_str = String::new();
-        if show_time && !time_part.is_empty() {
-            meta_str.push_str(time_part);
-        }
-        if show_lat && !lat_part.is_empty() {
+            let meta_str = match (show_time && !time_part.is_empty(), show_lat && !lat_part.is_empty()) {
+                (true, true) => format!("[{} | {}]", time_part, lat_part),
+                (true, false) => format!("[{}]", time_part),
+                (false, true) => format!("[{}]", lat_part),
+                (false, false) => String::new(),
+            };
+
             if !meta_str.is_empty() {
-                meta_str.push_str(" | ");
+                Line::from(vec![
+                    Span::styled(&m.author, header_style),
+                    Span::raw(" "),
+                    Span::styled(meta_str, header_style),
+                    Span::styled(status_indicator, header_style),
+                ])
+            } else {
+                Line::from(vec![
+                    Span::styled(&m.author, header_style),
+                    Span::styled(status_indicator, header_style),
+                ])
             }
-            meta_str.push_str(lat_part);
-        }
-
-        let header_line = if !meta_str.is_empty() {
-            Line::from(vec![
-                Span::styled(m.author.clone(), header_style),
-                Span::raw(" "),
-                Span::styled(format!("[{}]", meta_str), header_style),
-                if !status_indicator.is_empty() {
-                    Span::styled(format!(" {}", status_indicator), header_style)
-                } else {
-                    Span::raw("")
-                },
-            ])
         } else {
             Line::from(vec![
-                Span::styled(m.author.clone(), header_style),
-                if !status_indicator.is_empty() {
-                    Span::styled(format!(" {}", status_indicator), header_style)
-                } else {
-                    Span::raw("")
-                },
+                Span::styled(&m.author, header_style),
+                Span::styled(status_indicator, header_style),
             ])
         };
 

@@ -5,8 +5,9 @@ pub mod http;
 use crate::app::state::AppState;
 use crate::models::AppEvent;
 use crate::network::http::DiscordHttpClient;
+use crossterm::event::EventStream;
+use futures_util::StreamExt;
 use std::sync::Arc;
-use std::time::Duration;
 use tokio::sync::{mpsc, mpsc::Sender, Mutex};
 
 pub fn spawn_network_handlers(
@@ -22,14 +23,13 @@ pub fn spawn_network_handlers(
 
     let client_wrapper = Arc::new(DiscordHttpClient::new(http_client.clone(), token));
 
-    // 1. Asynchronously poll Crossterm terminal input key events
+    // 1. Zero-latency async event stream for terminal key/mouse inputs
     let input_tx = event_tx.clone();
     tokio::spawn(async move {
-        loop {
-            if let Ok(true) = crossterm::event::poll(Duration::from_millis(50)) {
-                if let Ok(ev) = crossterm::event::read() {
-                    let _ = input_tx.send(AppEvent::Terminal(ev)).await;
-                }
+        let mut reader = EventStream::new();
+        while let Some(Ok(ev)) = reader.next().await {
+            if input_tx.send(AppEvent::Terminal(ev)).await.is_err() {
+                break;
             }
         }
     });
