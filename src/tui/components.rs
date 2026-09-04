@@ -7,7 +7,7 @@ use ratatui::{
     widgets::{Block, Borders, List, ListItem, Paragraph},
 };
 
-pub fn render_messages<'a>(state: &AppState) -> (List<'a>, String) {
+pub fn render_messages<'a>(state: &'a AppState) -> (List<'a>, String) {
     let self_user = &state.self_username;
     let show_time = state.show_timestamp;
     let show_lat = state.show_latency;

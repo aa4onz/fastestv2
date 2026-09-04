@@ -6,7 +6,7 @@ edition = "2021"
 [dependencies]
 # Terminal UI and input handling
 ratatui = "0.26"
-crossterm = "0.27"
+crossterm = { version = "0.27", features = ["event-stream"] }
 
 # Asynchronous runtime and low-latency networking
 tokio = { version = "1.0", features = ["full"] }
@@ -20,4 +20,4 @@ serde_json = "1.0"
 
 # Timestamps for messages
 chrono = "0.4"
-rand = "0.8" 
+rand = "0.8"
