@@ -92,13 +92,9 @@ pub async fn run_gateway_loop(app_state: Arc<Mutex<AppState>>, event_tx: Sender<
                                             let local_now_ms = chrono::Utc::now().timestamp_millis();
                                             // Correct local clock skew using calculated clock offset
                                             let corrected_now_ms = local_now_ms - clock_offset;
+                                            let diff = (corrected_now_ms - discord_epoch_ms as i64).abs() as u64;
 
-                                            if corrected_now_ms >= (discord_epoch_ms as i64) {
-                                                let diff = (corrected_now_ms - discord_epoch_ms as i64) as u64;
-                                                format!("{} | {}ms", current_time_str, diff)
-                                            } else {
-                                                current_time_str.clone()
-                                            }
+                                            format!("{} | {}ms", current_time_str, diff)
                                         } else {
                                             current_time_str
                                         };
