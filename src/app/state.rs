@@ -1,6 +1,7 @@
 // src/app/state.rs
 use crate::models::DiscordMessage;
 use ratatui::widgets::ListState;
+use std::collections::HashMap;
 use std::time::Instant;
 
 pub struct AppState {
@@ -12,6 +13,7 @@ pub struct AppState {
     pub list_state: ListState,
     pub failed_nonces: Vec<String>,
     pub last_typing_sent: Option<Instant>,
+    pub outbound_timers: HashMap<String, Instant>,
 }
 
 impl AppState {
@@ -28,6 +30,7 @@ impl AppState {
             list_state,
             failed_nonces: Vec::new(),
             last_typing_sent: None,
+            outbound_timers: HashMap::new(),
         }
     }
 }

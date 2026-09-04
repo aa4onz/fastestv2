@@ -2,6 +2,7 @@
 use crate::models::{AppEvent, DiscordMessage, MessageStatus};
 use chrono::Local;
 use crossterm::event::{Event, KeyCode, KeyModifiers};
+use std::time::Instant;
 use tokio::sync::mpsc::Sender;
 
 impl crate::app::state::AppState {
@@ -28,20 +29,17 @@ impl crate::app::state::AppState {
                 }
             }
             AppEvent::MessageSent { nonce, timestamp } => {
+                let elapsed_ms = self.outbound_timers.remove(&nonce).map(|start| start.elapsed().as_millis());
+
                 if let Some(m) = self.messages.iter_mut().find(|x| x.nonce == nonce) {
                     m.status = MessageStatus::Delivered;
                     
-                    if let Some(stripped_nonce) = nonce.strip_prefix("n-") {
-                        if let Ok(creation_ms) = stripped_nonce.parse::<i64>() {
-                            let current_ms = chrono::Utc::now().timestamp_millis();
-                            let total_diff_ms = (current_ms - creation_ms).max(0);
-                            
-                            m.timestamp = format!(
-                                "{} | {}ms",
-                                Local::now().format("%H:%M:%S%.3f"),
-                                total_diff_ms
-                            );
-                        }
+                    if let Some(rtt) = elapsed_ms {
+                        m.timestamp = format!(
+                            "{} | {}ms",
+                            Local::now().format("%H:%M:%S%.3f"),
+                            rtt
+                        );
                     } else if !timestamp.is_empty() {
                         m.timestamp = timestamp;
                     }
@@ -50,6 +48,7 @@ impl crate::app::state::AppState {
                 }
             }
             AppEvent::MessageFailed { nonce } => {
+                self.outbound_timers.remove(&nonce);
                 if let Some(m) = self.messages.iter_mut().find(|x| x.nonce == nonce) {
                     m.status = MessageStatus::Failed;
                 }
@@ -85,6 +84,7 @@ impl crate::app::state::AppState {
                             };
 
                             if found {
+                                self.outbound_timers.insert(last_failed_nonce.clone(), Instant::now());
                                 let _ = tx.send(AppEvent::HttpSendChat {
                                     nonce: last_failed_nonce,
                                     text,
@@ -111,9 +111,11 @@ impl crate::app::state::AppState {
                     KeyCode::Enter if !self.input_text.is_empty() => {
                         self.last_typing_sent = None;
                         let text = std::mem::take(&mut self.input_text);
-                        let creation_ms = chrono::Utc::now().timestamp_millis();
-                        let nonce = format!("n-{}", creation_ms);
+                        let now_instant = Instant::now();
+                        let nonce = format!("n-{}", chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0));
                         let current_time_str = Local::now().format("%H:%M:%S%.3f").to_string();
+
+                        self.outbound_timers.insert(nonce.clone(), now_instant);
 
                         self.messages.push(DiscordMessage {
                             nonce: nonce.clone(),
