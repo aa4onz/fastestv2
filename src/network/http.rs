@@ -109,9 +109,7 @@ impl DiscordHttpClient {
         self.client.post(&url)
             .header("Authorization", &self.token)
             .header("Content-Type", "application/json")
-            .header("Accept", "*/*")
             .header("Origin", "https://discord.com")
-            .header("X-Discord-Locale", "en-US")
             .json(&payload)
             .send()
             .await

@@ -5,6 +5,7 @@ pub mod app;
 pub mod tui;
 
 use models::AppEvent;
+use reqwest::header::{HeaderMap, HeaderValue, ACCEPT, ACCEPT_LANGUAGE, USER_AGENT};
 use std::io::{self, Write};
 use std::sync::Arc;
 use tokio::sync::{mpsc, Mutex};
@@ -61,12 +62,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let (event_tx, mut event_rx) = mpsc::channel::<AppEvent>(512);
         let (net_tx, net_rx) = mpsc::channel::<AppEvent>(256); 
 
+        let mut default_headers = HeaderMap::new();
+        default_headers.insert(ACCEPT, HeaderValue::from_static("*/*"));
+        default_headers.insert(ACCEPT_LANGUAGE, HeaderValue::from_static("en-US,en;q=0.9"));
+        default_headers.insert(USER_AGENT, HeaderValue::from_static("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"));
+        default_headers.insert("sec-ch-ua", HeaderValue::from_static("\"Chromium\";v=\"128\", \"Not;A=Brand\";v=\"24\", \"Google Chrome\";v=\"128\""));
+        default_headers.insert("sec-ch-ua-mobile", HeaderValue::from_static("?0"));
+        default_headers.insert("sec-ch-ua-platform", HeaderValue::from_static("\"Windows\""));
+        default_headers.insert("sec-fetch-dest", HeaderValue::from_static("empty"));
+        default_headers.insert("sec-fetch-mode", HeaderValue::from_static("cors"));
+        default_headers.insert("sec-fetch-site", HeaderValue::from_static("same-origin"));
+        default_headers.insert("x-discord-timezone", HeaderValue::from_static("Asia/Dhaka"));
+
         let http_client = reqwest::Client::builder()
             .tcp_nodelay(true)
             .tcp_keepalive(std::time::Duration::from_secs(15))
             .pool_max_idle_per_host(50)
             .pool_idle_timeout(std::time::Duration::from_secs(300))
-            .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36")
+            .default_headers(default_headers)
             .build()?;
 
         network::spawn_network_handlers(Arc::clone(&app_state), event_tx.clone(), http_client.clone(), net_rx);
