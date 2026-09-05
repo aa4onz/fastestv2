@@ -37,7 +37,20 @@ pub fn spawn_network_handlers(
     // 2. Fire the secure WebSocket Listener loop
     tokio::spawn(gateway::run_gateway_loop(Arc::clone(&app_state), event_tx.clone()));
 
-    // 3. ⚡ NON-BLOCKING CONCURRENT OUTBOUND HTTP WORKER PIPELINE
+    // 3. Keep-alive HTTP connection warming loop (pings Discord API every 10s to keep HTTP/2 pool warm)
+    let ping_client = Arc::clone(&client_wrapper);
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(10));
+        loop {
+            interval.tick().await;
+            let _ = ping_client.client.get("https://discord.com/api/v10/gateway")
+                .header("Authorization", &ping_client.token)
+                .send()
+                .await;
+        }
+    });
+
+    // 4. ⚡ NON-BLOCKING CONCURRENT OUTBOUND HTTP WORKER PIPELINE
     let worker_tx = event_tx.clone();
     let worker_state = Arc::clone(&app_state);
     let mut outbound_rx = net_rx;
