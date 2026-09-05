@@ -158,7 +158,8 @@ impl crate::app::state::AppState {
                             }
                             KeyCode::Enter => {
                                 let input = self.modal_input.trim().to_string();
-                                let target_id = input.split('/').last().unwrap_or("").to_string();
+                                let clean_input = input.trim_end_matches('/');
+                                let target_id = clean_input.split('/').last().unwrap_or("").split('?').next().unwrap_or("").to_string();
                                 if !target_id.is_empty() && target_id.chars().all(|c| c.is_numeric()) {
                                     let _ = tx.send(AppEvent::SwitchChannel(target_id)).await;
                                 }
@@ -170,7 +171,6 @@ impl crate::app::state::AppState {
                             }
                             _ => {}
                         },
-                        _ => {}
                     }
                     return false;
                 }

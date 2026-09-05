@@ -35,7 +35,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             url_input = url_input.trim().to_string();
         }
 
-        let target_channel_id = url_input.split('/').last().unwrap_or("").to_string();
+        let clean_url = url_input.trim_end_matches('/');
+        let target_channel_id = clean_url.split('/').last().unwrap_or("").split('?').next().unwrap_or("").to_string();
         if target_channel_id.is_empty() || !target_channel_id.chars().all(|c| c.is_numeric()) {
             println!("Error: Invalid Discord Channel URL provided!");
             let _ = std::fs::remove_file(".channel_cache");

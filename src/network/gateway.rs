@@ -10,9 +10,9 @@ use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 pub async fn run_gateway_loop(app_state: Arc<Mutex<AppState>>, event_tx: Sender<AppEvent>) {
     let url = "wss://gateway.discord.gg/?v=10&encoding=json";
     loop {
-        let (token, target_cid) = {
+        let token = {
             let state = app_state.lock().await;
-            (state.token.clone(), state.target_channel_id.clone())
+            state.token.clone()
         };
         if token.is_empty() { break; }
 
@@ -74,42 +74,49 @@ pub async fn run_gateway_loop(app_state: Arc<Mutex<AppState>>, event_tx: Sender<
                                         if !name.is_empty() {
                                             let _ = w_tx.send(AppEvent::SetSelfUsername(name.to_string())).await;
                                         }
-                                    } else if ev == "MESSAGE_CREATE" && pay.d["channel_id"].as_str() == Some(&target_cid) {
-                                        let msg_id_str = pay.d["id"].as_str().unwrap_or("0");
-                                        let current_time_str = chrono::Local::now().format("%H:%M:%S%.3f").to_string();
+                                    } else if ev == "MESSAGE_CREATE" {
+                                        let current_target_cid = app_state.lock().await.target_channel_id.clone();
+                                        if pay.d["channel_id"].as_str() == Some(&current_target_cid) {
+                                            let msg_id_str = pay.d["id"].as_str().unwrap_or("0");
+                                            let current_time_str = chrono::Local::now().format("%H:%M:%S%.3f").to_string();
 
-                                        let transit_time_str = if let Ok(msg_id) = msg_id_str.parse::<u64>() {
-                                            let discord_epoch_ms = (msg_id >> 22) + 1420070400000;
-                                            let local_now_ms = chrono::Utc::now().timestamp_millis();
-                                            let diff = if local_now_ms >= discord_epoch_ms as i64 {
-                                                (local_now_ms - discord_epoch_ms as i64) as u64
+                                            let transit_time_str = if let Ok(msg_id) = msg_id_str.parse::<u64>() {
+                                                let discord_epoch_ms = (msg_id >> 22) + 1420070400000;
+                                                let local_now_ms = chrono::Utc::now().timestamp_millis();
+                                                let diff = if local_now_ms >= discord_epoch_ms as i64 {
+                                                    (local_now_ms - discord_epoch_ms as i64) as u64
+                                                } else {
+                                                    1
+                                                };
+
+                                                format!("{} | {}ms", current_time_str, diff)
                                             } else {
-                                                1
+                                                current_time_str
                                             };
 
-                                            format!("{} | {}ms", current_time_str, diff)
-                                        } else {
-                                            current_time_str
-                                        };
+                                            let nonce = pay.d["nonce"]
+                                                .as_str()
+                                                .filter(|s| !s.is_empty())
+                                                .unwrap_or_else(|| pay.d["id"].as_str().unwrap_or(""))
+                                                .to_string();
 
-                                        let nonce = pay.d["nonce"].as_str().unwrap_or("").to_string();
+                                            let member_nick = pay.d["member"]["nick"].as_str().filter(|s| !s.is_empty());
+                                            let global_name = pay.d["author"]["global_name"].as_str().filter(|s| !s.is_empty());
+                                            let username = pay.d["author"]["username"].as_str().unwrap_or("Unknown");
 
-                                        let member_nick = pay.d["member"]["nick"].as_str().filter(|s| !s.is_empty());
-                                        let global_name = pay.d["author"]["global_name"].as_str().filter(|s| !s.is_empty());
-                                        let username = pay.d["author"]["username"].as_str().unwrap_or("Unknown");
+                                            let author = member_nick
+                                                .or(global_name)
+                                                .unwrap_or(username)
+                                                .to_string();
 
-                                        let author = member_nick
-                                            .or(global_name)
-                                            .unwrap_or(username)
-                                            .to_string();
-
-                                        let _ = w_tx.send(AppEvent::IncomingMessage(DiscordMessage {
-                                            nonce,
-                                            author,
-                                            content: pay.d["content"].as_str().unwrap_or("").to_string(),
-                                            timestamp: transit_time_str,
-                                            status: MessageStatus::Delivered,
-                                        })).await;
+                                            let _ = w_tx.send(AppEvent::IncomingMessage(DiscordMessage {
+                                                nonce,
+                                                author,
+                                                content: pay.d["content"].as_str().unwrap_or("").to_string(),
+                                                timestamp: transit_time_str,
+                                                status: MessageStatus::Delivered,
+                                            })).await;
+                                        }
                                     }
                                 }
                             }
