@@ -171,6 +171,7 @@ impl crate::app::state::AppState {
                             }
                             _ => {}
                         },
+                        ActiveModal::None => {}
                     }
                     return false;
                 }
