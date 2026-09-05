@@ -60,39 +60,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let (event_tx, mut event_rx) = mpsc::channel::<AppEvent>(512);
         let (net_tx, net_rx) = mpsc::channel::<AppEvent>(256); 
-        
-        let mut headers = reqwest::header::HeaderMap::new();
-        headers.insert("accept", "*/*".parse().unwrap());
-        headers.insert("accept-language", "en-US,en;q=0.9".parse().unwrap());
-        headers.insert("sec-ch-ua", "\"Chromium\";v=\"128\", \"Not;A=Brand\";v=\"24\", \"Google Chrome\";v=\"128\"".parse().unwrap());
-        headers.insert("sec-ch-ua-mobile", "?0".parse().unwrap());
-        headers.insert("sec-ch-ua-platform", "\"Windows\"".parse().unwrap());
-        headers.insert("sec-fetch-dest", "empty".parse().unwrap());
-        headers.insert("sec-fetch-mode", "cors".parse().unwrap());
-        headers.insert("sec-fetch-site", "same-origin".parse().unwrap());
-        headers.insert("x-debug-options", "bugReporterEnabled".parse().unwrap());
-        headers.insert("x-discord-timezone", "Asia/Dhaka".parse().unwrap());
-        headers.insert("x-super-properties", "eyJvcyI6IldpbmRvd3MiLCJicm93c2VyIjoiQ2hyb21lIiwiZGV2aWNlIjoiIiwicmVmZXJyZXIiOiJodHRwczovL2Rpc2NvcmQuY29tLyIsIm9zX3ZlcnNpb24iOiIxMCIsImJyb3dzZXJfdmVyc2lvbiI6IxEyOC4wLjAuMCIsImJsdWV0b290aF9lbmFibGVkIjpmYWxzZX0=".parse().unwrap());
 
         let http_client = reqwest::Client::builder()
             .tcp_nodelay(true)
             .tcp_keepalive(std::time::Duration::from_secs(15))
             .pool_max_idle_per_host(50)
             .pool_idle_timeout(std::time::Duration::from_secs(300))
-            .http2_prior_knowledge()
-            .default_headers(headers)
             .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36")
-            .build()
-            .unwrap_or_else(|_| {
-                // Fallback to standard HTTP builder if prior knowledge setup fails on standard TLS
-                reqwest::Client::builder()
-                    .tcp_nodelay(true)
-                    .tcp_keepalive(std::time::Duration::from_secs(15))
-                    .pool_max_idle_per_host(50)
-                    .pool_idle_timeout(std::time::Duration::from_secs(300))
-                    .build()
-                    .unwrap()
-            });
+            .build()?;
 
         network::spawn_network_handlers(Arc::clone(&app_state), event_tx.clone(), http_client.clone(), net_rx);
 
